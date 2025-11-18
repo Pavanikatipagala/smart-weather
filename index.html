@@ -1,0 +1,175 @@
+<!--
+Smart Weather Dashboard — WeatherAPI.com version
+This single-file HTML app uses WeatherAPI (free key) and supports multiple cities,
+current weather (temp, humidity, wind), and a multi-day forecast chart.
+
+How to use
+----------
+1. Replace the API_KEY constant in the script with your WeatherAPI key.
+2. Save as index.html and open in a browser or publish to GitHub Pages.
+
+Notes
+-----
+- WeatherAPI free tier provides up to 3-day forecast in the free plan. The app uses whatever days are returned.
+- You provided a key during the chat; the example below uses that key. You can replace it anytime.
+
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Smart Weather Dashboard — WeatherAPI</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root{--bg:#0f1724;--muted:#9aa4b2;--accent:#60a5fa}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#071024);font-family:Inter,system-ui,Segoe UI,Roboto,Arial;color:#e6eef8}
+    .app{max-width:1100px;margin:24px auto;padding:18px}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px}
+    h1{font-size:20px;margin:0}
+    .controls{display:flex;gap:10px;align-items:center}
+    input[type=text]{padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:#e6eef8;min-width:260px}
+    button{padding:10px 12px;border-radius:10px;border:0;background:linear-gradient(90deg,var(--accent),#3b82f6);color:white;cursor:pointer}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:16px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.03)}
+    .city-row{display:flex;align-items:center;justify-content:space-between}
+    .temp{font-weight:700;font-size:28px}
+    .meta{color:var(--muted);font-size:13px}
+    .chip{padding:6px 8px;border-radius:20px;background:rgba(255,255,255,0.02);font-size:13px;border:1px solid rgba(255,255,255,0.02);cursor:pointer}
+    .remove-btn{background:transparent;border:0;color:var(--muted);cursor:pointer;font-size:14px}
+    .chartwrap{height:120px;margin-top:10px}
+    footer{margin-top:20px;color:var(--muted);font-size:13px;text-align:center}
+    .icon{width:56px;height:56px}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>Smart Weather Dashboard</h1>
+        <p class="meta">Live weather + multi-day forecast (WeatherAPI)</p>
+      </div>
+      <div class="controls">
+        <input id="cityInput" type="text" placeholder="Add cities (comma separated) e.g. Mumbai, London" />
+        <button id="addBtn">Add</button>
+      </div>
+    </header>
+
+    <section style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="chip" data-cities="Mumbai,Delhi,Bengaluru,Hyderabad">Major Indian Cities</button>
+      <button class="chip" data-cities="London,New York,Tokyo,Sydney">World Capitals</button>
+      <button class="chip" id="clearBtn">Clear All</button>
+      <div style="margin-left:auto;color:var(--muted);font-size:13px">Provider: WeatherAPI</div>
+    </section>
+
+    <main>
+      <div id="grid" class="grid"></div>
+    </main>
+
+    <footer>
+      <small>Built with WeatherAPI • Chart.js • Designed for demo/learning.</small>
+    </footer>
+  </div>
+
+  <script>
+    // ===== CONFIG =====
+    // Your WeatherAPI key (you provided this in chat). Replace if you want another.
+    const API_KEY = '7c7f19e76a06404cbc3102120251811';
+
+    // Default cities
+    const DEFAULT_CITIES = ['Mumbai','Delhi','Bengaluru','Hyderabad'];
+
+    const grid = document.getElementById('grid');
+    const cityInput = document.getElementById('cityInput');
+    const addBtn = document.getElementById('addBtn');
+    const clearBtn = document.getElementById('clearBtn');
+
+    let cities = [];
+
+    function persist(){ localStorage.setItem('wapi_cities', JSON.stringify(cities)); }
+    function loadPersist(){ const s=localStorage.getItem('wapi_cities'); if(s) cities=JSON.parse(s); if(!cities || !cities.length) cities=DEFAULT_CITIES.map(c=>c.toLowerCase()); }
+
+    async function fetchWeather(city){
+      // Use WeatherAPI forecast endpoint (current + forecast)
+      const url = `https://api.weatherapi.com/v1/forecast.json?key=${API_KEY}&q=${encodeURIComponent(city)}&days=3&aqi=no&alerts=no`;
+      const res = await fetch(url);
+      if(!res.ok) throw new Error((await res.json()).error?.message || res.statusText);
+      return await res.json();
+    }
+
+    function renderCard(data){
+      const city = data.location.name;
+      const key = city.toLowerCase();
+      const card = document.createElement('div'); card.className='card'; card.dataset.city=key;
+      const cur = data.current;
+      // build chart labels and temps from forecast.forecastday
+      const days = data.forecast.forecastday || [];
+      const labels = days.map(d=>d.date);
+      const temps = days.map(d=>Math.round((d.day.maxtemp_c + d.day.mintemp_c)/2));
+
+      card.innerHTML = `
+        <div class="city-row">
+          <div style="display:flex;gap:10px;align-items:center">
+            <img class="icon" src="https:${cur.condition.icon}" alt="icon"/>
+            <div>
+              <div style="font-weight:700">${city}, ${data.location.country}</div>
+              <div class="meta">Local time: ${data.location.localtime}</div>
+              <div class="meta">${cur.condition.text}</div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div class="temp">${Math.round(cur.temp_c)}°C</div>
+            <div class="meta">Feels: ${Math.round(cur.feelslike_c)}°C • Hum: ${cur.humidity}% • Wind: ${cur.wind_kph} kph</div>
+            <button class="remove-btn">✖</button>
+          </div>
+        </div>
+        <div class="chartwrap"><canvas></canvas></div>
+      `;
+
+      card.querySelector('.remove-btn').addEventListener('click',()=>{ removeCity(key); });
+      grid.appendChild(card);
+
+      try{
+        const canvas = card.querySelector('canvas');
+        new Chart(canvas.getContext('2d'),{
+          type:'line',
+          data:{labels, datasets:[{label:'Avg °C',data:temps,fill:true,tension:0.25}]},
+          options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:false}},maintainAspectRatio:false}
+        });
+      }catch(e){console.warn('chart err',e)}
+    }
+
+    async function loadCity(city){
+      const lc = city.toLowerCase();
+      // skip duplicates
+      if(cities.includes(lc)) return;
+      cities.push(lc);
+      persist();
+      const ph = document.createElement('div'); ph.className='card'; ph.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><div><strong>${city}</strong></div><div style="color:var(--muted)">loading...</div></div>`;
+      grid.appendChild(ph);
+      try{
+        const data = await fetchWeather(city);
+        ph.remove();
+        renderCard(data);
+      }catch(err){
+        ph.remove();
+        const er = document.createElement('div'); er.className='card'; er.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><div><strong>${city}</strong> <span style="color:#ff6b6b">(${err.message})</span></div><button class="remove-btn">Remove</button></div>`;
+        er.querySelector('.remove-btn').addEventListener('click',()=>{ removeCity(lc) });
+        grid.appendChild(er);
+      }
+    }
+
+    function removeCity(city){ cities = cities.filter(c=>c!==city); persist(); const node = Array.from(grid.children).find(ch=>ch.dataset.city===city); if(node) node.remove(); }
+
+    async function init(){ loadPersist(); for(const c of cities){ await loadCity(c); } }
+
+    addBtn.addEventListener('click',()=>{ const val = cityInput.value.trim(); if(!val) return; const list = val.split(',').map(s=>s.trim()).filter(Boolean); for(const it of list){ loadCity(it); } cityInput.value=''; });
+    cityInput.addEventListener('keydown',e=>{ if(e.key==='Enter') addBtn.click(); });
+    document.querySelectorAll('.chip').forEach(ch=>ch.addEventListener('click',()=>{ const data = ch.dataset.cities; if(data){ const list = data.split(',').map(s=>s.trim()); for(const it of list){ loadCity(it); } } }));
+    clearBtn.addEventListener('click',()=>{ localStorage.removeItem('wapi_cities'); cities=[]; grid.innerHTML=''; });
+
+    init();
+  </script>
+</body>
+</html>
